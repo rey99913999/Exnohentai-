@@ -13,12 +13,12 @@ for root,dirs,files in os.walk(dst):
             # Use the mirror's dedicated Popular page; the old search-parameter
             # approximation can return an empty or unrelated result set.
             s=re.sub(
-                r'    override suspend fun getPopularManga\\(page: Int\\): MangasPage = if \\(isLangNatural\\(\\)\\) \\{.*?\\n    \\}\\n\\n    override suspend fun getLatestUpdates',
-                '    override suspend fun getPopularManga(page: Int): MangasPage = if (page == 1) {\\n'
-                '        loadListing("$baseUrl/popular", page)\\n'
-                '    } else {\\n'
-                '        MangasPage(emptyList(), false)\\n'
-                '    }\\n\\n'
+                r'    override suspend fun getPopularManga\(page: Int\): MangasPage = if \(isLangNatural\(\)\) \{.*?\n    \}\n\n    override suspend fun getLatestUpdates',
+                '    override suspend fun getPopularManga(page: Int): MangasPage = if (page == 1) {\n'
+                '        loadListing("$baseUrl/popular", page)\n'
+                '    } else {\n'
+                '        MangasPage(emptyList(), false)\n'
+                '    }\n\n'
                 '    override suspend fun getLatestUpdates',
                 s, count=1, flags=re.S
             )
@@ -92,8 +92,8 @@ for root,dirs,files in os.walk(dst):
         return ListingResult(MangasPage(mangas, hasNextPage), nextId)
     }"""
             s=re.sub(
-                r'    private fun parseMangaPage\\(response: Response, listingUrl: String, page: Int, requestId: Long\\): ListingResult \\{.*?\\n    \\}\\n\\n    // A gallery is a single chapter',
-                lambda _: new_parser + "\\n\\n    // A gallery is a single chapter",
+                r'    private fun parseMangaPage\(response: Response, listingUrl: String, page: Int, requestId: Long\): ListingResult \{.*?\n    \}\n\n    // A gallery is a single chapter',
+                lambda _: new_parser + "\n\n    // A gallery is a single chapter",
                 s, count=1, flags=re.S
             )
             s=s.replace("e-hentai.org","ex.fangliding.eu.org")
@@ -192,7 +192,7 @@ if os.path.isdir(old): shutil.move(old,new)
 gradle=os.path.join(dst,"build.gradle.kts")
 s=open(gradle,encoding="utf-8").read()
 s=s.replace('name = "E-Hentai"','name = "ExNoHentai"')
-s=re.sub(r"versionCode\\s*=\\s*\\d+", "versionCode = 2", s, count=1)
+s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 2", s, count=1)
 s=s.replace('baseUrl = "https://e-hentai.org"','baseUrl = "https://ex.fangliding.eu.org"')
 s=s.replace('host("e-hentai.org")','host("ex.fangliding.eu.org")')
 s=s.replace('host("exhentai.org")','host("ex.fangliding.eu.org")')
