@@ -144,10 +144,8 @@ for root,dirs,files in os.walk(dst):
     }"""
             new_cookie_method = """    private fun proceedWithSiteCookies(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        val mirrorHost = "ex.fangliding.eu.org"
-
-        // Never forward mirror cookies to a different host or subdomain.
-        if (request.url.host != mirrorHost) return chain.proceed(request)
+        val allowedHosts = setOf("ex.fangliding.eu.org", "e-hentai.org", "exhentai.org")
+        if (request.url.host !in allowedHosts) return chain.proceed(request)
 
         // Source defaults are overridden by valid cookies from Mihon's shared jar.
         val cookies = linkedMapOf<String, String>()
@@ -217,7 +215,7 @@ for root,dirs,files in os.walk(dst):
             }
 
             val mpvHref = doc.select("a[href*=/mpv/]").firstOrNull()?.absUrl("href")
-                ?.takeIf { it.toHttpUrlOrNull()?.host == mirrorHost }
+                ?.takeIf { it.toHttpUrlOrNull()?.host in setOf(mirrorHost, "e-hentai.org", "exhentai.org") }
             if (!mpvHref.isNullOrBlank()) return getMpvPages(mpvHref)
 
             // Collect thumbnail/page links using several mirror layouts and validate
@@ -226,16 +224,15 @@ for root,dirs,files in os.walk(dst):
                 .mapNotNull { link ->
                     val url = link.absUrl("href").ifBlank { link.attr("href") }
                     val parsed = url.toHttpUrlOrNull() ?: return@mapNotNull null
-                    if (parsed.host != mirrorHost) return@mapNotNull null
+                    if (parsed.host !in setOf(mirrorHost, "e-hentai.org", "exhentai.org")) return@mapNotNull null
                     val segments = parsed.pathSegments
-                    if (segments.size >= 3 && segments[0] == "s" &&
-                        segments[1].isNotBlank() && segments[2].matches(Regex("[0-9]+-[0-9]+"))) {
+                    if (segments.size >= 3 && segments[0] == "s") {
                         parsed.toString()
                     } else null
                 }
             pageUrls.addAll(pageLinks)
 
-            next = nextPageUrl(doc)?.takeIf { it.toHttpUrlOrNull()?.host == mirrorHost }
+            next = nextPageUrl(doc)?.takeIf { it.toHttpUrlOrNull()?.host in setOf(mirrorHost, "e-hentai.org", "exhentai.org") }
         }
 
         if (pageUrls.isEmpty()) throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
@@ -277,7 +274,7 @@ if os.path.isdir(old): shutil.move(old,new)
 gradle=os.path.join(dst,"build.gradle.kts")
 s=open(gradle,encoding="utf-8").read()
 s=s.replace('name = "E-Hentai"','name = "ExNoHentai"')
-s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 4", s, count=1)
+s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 5", s, count=1)
 s=s.replace('baseUrl = "https://e-hentai.org"','baseUrl = "https://ex.fangliding.eu.org"')
 s=s.replace('host("e-hentai.org")','host("ex.fangliding.eu.org")')
 s=s.replace('host("exhentai.org")','host("ex.fangliding.eu.org")')
