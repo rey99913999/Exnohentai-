@@ -241,10 +241,9 @@ for root,dirs,files in os.walk(dst):
         if (pageUrls.isEmpty()) throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
         return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
     }"""
-            if (old_page_list in s) {
+            if old_page_list in s:
                 s = s.replace(old_page_list, new_page_list, 1)
                 print("Applied mirror reader extraction v2:", path)
-            }
 
             old_next_page = """    private fun nextPageUrl(element: Element) = element.select("a[onclick=return false]").last()?.let {
         if (it.text() == ">") it.attr("abs:href") else null
