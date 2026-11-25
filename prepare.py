@@ -189,14 +189,40 @@ for root,dirs,files in os.walk(dst):
             new_page_list = """    override suspend fun getPageList(chapter: SChapter): List<Page> {
         val pageUrls = mutableListOf<String>()
         var next: String? = "$baseUrl${chapter.url}"
+        var pageNumber = 0
         while (next != null) {
-            val doc = client.get(next, Fetch.DOCUMENT).asJsoup()
-            val hrefs = doc.select("#gdt a").map { it.attr("abs:href") }
+            pageNumber++
+            val response = client.get(next, Fetch.DOCUMENT)
+            val doc = response.asJsoup()
+            val pageText = doc.body()?.text().orEmpty()
+            val challenge = response.header("cf-mitigated") == "challenge" ||
+                doc.title().contains("Just a moment", ignoreCase = true) ||
+                pageText.contains("Verify you are human", ignoreCase = true) ||
+                pageText.contains("Checking your browser", ignoreCase = true)
+
+            if (!response.isSuccessful || challenge) {
+                throw java.io.IOException(
+                    "ExNoHentai chapter request failed: HTTP ${response.code}, " +
+                        "requested=${next}, final=${response.request.url}, title='${doc.title()}'. " +
+                        "Cloudflare challenge=${challenge}. Text=${pageText.take(180)}"
+                )
+            }
+
+            val hrefs = doc.select("#gdt a[href]").map { it.absUrl("href") }.filter { it.isNotBlank() }
             hrefs.firstOrNull { "/mpv/" in it }?.let { return getMpvPages(it) }
             pageUrls += hrefs
             next = nextPageUrl(doc)
         }
-        return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
+
+        if (pageUrls.isEmpty()) {
+            throw java.io.IOException(
+                "ExNoHentai found no reader pages. Chapter=${chapter.url}, " +
+                    "pageCount=0, lastRequest=${baseUrl}${chapter.url}. " +
+                    "The server response did not contain usable links in #gdt."
+            )
+        }
+
+        return pageUrls.distinct().mapIndexed { index, url -> Page(index, url = url) }
     }"""
             if "override suspend fun getPageList(chapter: SChapter)" in s:
                 s, reader_replacements = re.subn(
