@@ -1,0 +1,36 @@
+name: Build ExNoHentai APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout workspace
+        uses: actions/checkout@v4
+      - name: Clone upstream source
+        run: git clone --depth 1 https://github.com/yuzono/cursed-manga-extensions.git upstream
+      - name: Prepare ExNoHentai module
+        run: python3 prepare.py
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build release APK
+        working-directory: upstream
+        run: ./gradlew :src:all:exnohentai:assembleRelease --no-daemon
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExNoHentai-APK
+          path: upstream/src/all/exnohentai/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
