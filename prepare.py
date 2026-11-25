@@ -48,6 +48,57 @@ for root,dirs,files in os.walk(dst):
                 r'    private fun getCookieValue\(.*?\n    private fun getForceEhPref\(\): Boolean = preferences\.getBoolean\(FORCE_EH, FORCE_EH_DEFAULT_VALUE\)\n',
                 '', s, count=1, flags=re.S
             )
+            # Pull current mirror cookies from Mihon's shared jar on every request.
+            # This allows a newly solved Cloudflare challenge to be used immediately.
+            old_cookie_method = """    private fun proceedWithSiteCookies(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val host = baseUrl.toHttpUrl().host
+        if (request.url.host != host && !request.url.host.endsWith(".$host")) return chain.proceed(request)
+        return chain.proceed(request.newBuilder().header("Cookie", cookieHeader).build())
+    }"""
+            new_cookie_method = """    private fun proceedWithSiteCookies(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val mirrorHost = "ex.fangliding.eu.org"
+
+        // Never forward mirror cookies to a different host or subdomain.
+        if (request.url.host != mirrorHost) return chain.proceed(request)
+
+        // Source defaults are overridden by valid cookies from Mihon's shared jar.
+        val cookies = linkedMapOf<String, String>()
+        cookieHeader.split(";").forEach { entry ->
+            val separator = entry.indexOf('=')
+            if (separator > 0) {
+                cookies[entry.substring(0, separator).trim()] =
+                    entry.substring(separator + 1).trim()
+            }
+        }
+        network.client.cookieJar.loadForRequest(request.url).forEach { cookie ->
+            cookies[cookie.name] = cookie.value
+        }
+
+        val header = cookies.entries.joinToString("; ") { "\${it.key}=\${it.value}" }
+        return if (header.isEmpty()) {
+            chain.proceed(request)
+        } else {
+            chain.proceed(request.newBuilder().header("Cookie", header).build())
+        }
+    }"""
+            if old_cookie_method not in s:
+                raise SystemExit("Expected proceedWithSiteCookies implementation not found")
+            s = s.replace(old_cookie_method, new_cookie_method, 1)
+
+            # Keep gallery deep links and image fallback strictly on the mirror host.
+            s = s.replace(
+                'if (url.host.removePrefix("www.") !in setOf("ex.fangliding.eu.org")) return null',
+                'if (url.host != "ex.fangliding.eu.org") return null',
+            )
+            s = s.replace(
+                'if (bakHttpUrl == null ||\n'
+                '            !(bakHttpUrl.host == sourceHost || bakHttpUrl.host.endsWith(".$sourceHost"))\n'
+                '        ) {',
+                'if (bakHttpUrl == null || bakHttpUrl.host != sourceHost) {',
+            )
+
             open(path,"w",encoding="utf-8").write(s)
 old=os.path.join(dst,"src","eu","kanade","tachiyomi","extension","all","ehentai")
 new=os.path.join(dst,"src","eu","kanade","tachiyomi","extension","all","exnohentai")
