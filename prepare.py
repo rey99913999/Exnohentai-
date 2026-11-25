@@ -238,9 +238,14 @@ for root,dirs,files in os.walk(dst):
         if (pageUrls.isEmpty()) throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
         return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
     }"""
-            if old_page_list in s:
-                s = s.replace(old_page_list, new_page_list, 1)
-                print("Applied mirror reader extraction v2:", path)
+            s, reader_replacements = re.subn(
+                r'    override suspend fun getPageList\\(chapter: SChapter\\): List<Page> \\{.*?\\n    \\}\\n\\n    private suspend fun getMpvPages',
+                lambda _: new_page_list + "\\n\\n    private suspend fun getMpvPages",
+                s, count=1, flags=re.S
+            )
+            if reader_replacements != 1:
+                raise SystemExit("Failed to apply reader page-list patch: " + path)
+            print("Applied mirror reader extraction v3:", path)
 
             old_next_page = """    private fun nextPageUrl(element: Element) = element.select("a[onclick=return false]").last()?.let {
         if (it.text() == ">") it.attr("abs:href") else null
@@ -274,7 +279,7 @@ if os.path.isdir(old): shutil.move(old,new)
 gradle=os.path.join(dst,"build.gradle.kts")
 s=open(gradle,encoding="utf-8").read()
 s=s.replace('name = "E-Hentai"','name = "ExNoHentai"')
-s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 5", s, count=1)
+s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 6", s, count=1)
 s=s.replace('baseUrl = "https://e-hentai.org"','baseUrl = "https://ex.fangliding.eu.org"')
 s=s.replace('host("e-hentai.org")','host("ex.fangliding.eu.org")')
 s=s.replace('host("exhentai.org")','host("ex.fangliding.eu.org")')
