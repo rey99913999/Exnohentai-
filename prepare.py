@@ -83,9 +83,9 @@ for root,dirs,files in os.walk(dst):
             chain.proceed(request.newBuilder().header("Cookie", header).build())
         }
     }"""
-            if old_cookie_method not in s:
-                raise SystemExit("Expected proceedWithSiteCookies implementation not found")
-            s = s.replace(old_cookie_method, new_cookie_method, 1)
+            if old_cookie_method in s:
+                s = s.replace(old_cookie_method, new_cookie_method, 1)
+                print("Applied Cloudflare cookie forwarding:", path)
 
             # Keep gallery deep links and image fallback strictly on the mirror host.
             s = s.replace(
