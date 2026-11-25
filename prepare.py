@@ -182,7 +182,6 @@ for root,dirs,files in os.walk(dst):
         while (next != null) {
             val doc = client.get(next, Fetch.DOCUMENT).asJsoup()
             val hrefs = doc.select("#gdt a").map { it.attr("abs:href") }
-            // Newer layout links every thumbnail to the multi-page viewer
             hrefs.firstOrNull { "/mpv/" in it }?.let { return getMpvPages(it) }
             pageUrls += hrefs
             next = nextPageUrl(doc)
@@ -193,15 +192,16 @@ for root,dirs,files in os.walk(dst):
         val pageUrls = linkedSetOf<String>()
         val visitedPages = mutableSetOf<String>()
         val mirrorHost = baseUrl.toHttpUrl().host
-        var next: String? = baseUrl + chapter.url
+        val chapterUrl = chapter.url.toHttpUrlOrNull()?.let { url ->
+            if (url.host == mirrorHost) url.toString() else null
+        } ?: baseUrl + chapter.url
+        var next: String? = chapterUrl
         var lastPageSummary = ""
 
         while (next != null) {
             val currentUrl = next
             if (!visitedPages.add(currentUrl)) break
-            if (visitedPages.size > 100) {
-                throw java.io.IOException("Gallery reader stopped after 100 page-list requests to prevent a pagination loop")
-            }
+            if (visitedPages.size > 100) throw java.io.IOException("Reader pagination loop detected")
 
             val response = client.get(currentUrl, Fetch.DOCUMENT)
             val doc = response.asJsoup()
@@ -209,54 +209,48 @@ for root,dirs,files in os.walk(dst):
             lastPageSummary = "HTTP " + response.code + ", title='" + doc.title() +
                 "', url='" + response.request.url + "', body='" + pageText.take(180) + "'"
 
-            val cloudflarePage = response.header("cf-mitigated") == "challenge" ||
-                doc.title().contains("Just a moment", ignoreCase = true) ||
-                pageText.contains("Verify you are human", ignoreCase = true) ||
-                pageText.contains("Checking your browser", ignoreCase = true)
-            if (cloudflarePage) {
-                throw java.io.IOException("Cloudflare returned a verification page while loading gallery pages. " + lastPageSummary)
+            if (response.header("cf-mitigated") == "challenge" ||
+                doc.title().contains("Just a moment", true) ||
+                pageText.contains("Verify you are human", true) ||
+                pageText.contains("Checking your browser", true)) {
+                throw java.io.IOException("Cloudflare verification response: " + lastPageSummary)
             }
 
-            // Some gallery layouts expose the multi-page viewer outside #gdt.
-            val mpvHref = doc.selectFirst("a[href*=/mpv/]")?.absUrl("href")
+            val mpvHref = doc.select("a[href*=/mpv/]").firstOrNull()?.absUrl("href")
                 ?.takeIf { it.toHttpUrlOrNull()?.host == mirrorHost }
             if (!mpvHref.isNullOrBlank()) return getMpvPages(mpvHref)
 
-            // Support the classic table and the compact/thumbnail variants.
-            // The final /s/<key>/<gallery>-<page> path check avoids collecting
-            // unrelated links when the mirror changes surrounding markup.
-            val pageLinks = doc.select(
-                "#gdt a[href], .gdtm a[href], .gdtl a[href], .gdtc a[href], a[href*='/s/']",
-            ).mapNotNull { link ->
-                val pageUrl = link.absUrl("href").ifBlank { link.attr("href") }
-                val parsed = pageUrl.toHttpUrlOrNull() ?: return@mapNotNull null
-                val segments = parsed.pathSegments
-                if (segments.size >= 3 && segments[0] == "s" && segments[2].contains('-')) {
-                    parsed.toString()
-                } else {
-                    null
+            // Collect thumbnail/page links using several mirror layouts and validate
+            // the URL path without assuming the gallery-page suffix format.
+            val pageLinks = doc.select("#gdt a[href], .gdtm a[href], .gdtl a[href], .gdtc a[href], a[href*=/s/]")
+                .mapNotNull { link ->
+                    val url = link.absUrl("href").ifBlank { link.attr("href") }
+                    val parsed = url.toHttpUrlOrNull() ?: return@mapNotNull null
+                    if (parsed.host != mirrorHost) return@mapNotNull null
+                    val segments = parsed.pathSegments
+                    if (segments.size >= 3 && segments[0] == "s" &&
+                        segments[1].isNotBlank() && segments[2].matches(Regex("[0-9]+-[0-9]+"))) {
+                        parsed.toString()
+                    } else null
                 }
-            }
             pageUrls.addAll(pageLinks)
 
-            next = nextPageUrl(doc)
+            next = nextPageUrl(doc)?.takeIf { it.toHttpUrlOrNull()?.host == mirrorHost }
         }
 
-        if (pageUrls.isEmpty()) {
-            throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
-        }
-
+        if (pageUrls.isEmpty()) throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
         return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
     }"""
-            if old_page_list in s:
+            if (old_page_list in s) {
                 s = s.replace(old_page_list, new_page_list, 1)
-                print("Applied mirror reader page extraction:", path)
+                print("Applied mirror reader extraction v2:", path)
+            }
 
             old_next_page = """    private fun nextPageUrl(element: Element) = element.select("a[onclick=return false]").last()?.let {
         if (it.text() == ">") it.attr("abs:href") else null
     }"""
             new_next_page = """    private fun nextPageUrl(element: Element): String? {
-        val nextLink = element.selectFirst(".ptds + td a[href], .ptds+td>a[href]")
+        val nextLink = element.selectFirst(".ptds + td a[href], .ptds+td>a[href], a#unext[href]")
             ?: element.select("a[onclick=return false]").lastOrNull()
                 ?.takeIf { it.text().trim() == ">" }
         return nextLink?.absUrl("href")?.takeIf { it.isNotBlank() }
