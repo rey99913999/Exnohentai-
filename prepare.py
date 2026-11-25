@@ -173,6 +173,100 @@ for root,dirs,files in os.walk(dst):
                 s = s.replace(old_cookie_method, new_cookie_method, 1)
                 print("Applied Cloudflare cookie forwarding:", path)
 
+            # Repair reader-page extraction for the mirror.
+            # Keep pagination compatible with both the older onclick link and
+            # the current E-Hentai pagination table (.ptds + td > a).
+            old_page_list = """    override suspend fun getPageList(chapter: SChapter): List<Page> {
+        val pageUrls = mutableListOf<String>()
+        var next: String? = "$baseUrl${chapter.url}"
+        while (next != null) {
+            val doc = client.get(next, Fetch.DOCUMENT).asJsoup()
+            val hrefs = doc.select("#gdt a").map { it.attr("abs:href") }
+            // Newer layout links every thumbnail to the multi-page viewer
+            hrefs.firstOrNull { "/mpv/" in it }?.let { return getMpvPages(it) }
+            pageUrls += hrefs
+            next = nextPageUrl(doc)
+        }
+        return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
+    }"""
+            new_page_list = """    override suspend fun getPageList(chapter: SChapter): List<Page> {
+        val pageUrls = linkedSetOf<String>()
+        val visitedPages = mutableSetOf<String>()
+        val mirrorHost = baseUrl.toHttpUrl().host
+        var next: String? = baseUrl + chapter.url
+        var lastPageSummary = ""
+
+        while (next != null) {
+            val currentUrl = next
+            if (!visitedPages.add(currentUrl)) break
+            if (visitedPages.size > 100) {
+                throw java.io.IOException("Gallery reader stopped after 100 page-list requests to prevent a pagination loop")
+            }
+
+            val response = client.get(currentUrl, Fetch.DOCUMENT)
+            val doc = response.asJsoup()
+            val pageText = doc.body()?.text().orEmpty()
+            lastPageSummary = "HTTP " + response.code + ", title='" + doc.title() +
+                "', url='" + response.request.url + "', body='" + pageText.take(180) + "'"
+
+            val cloudflarePage = response.header("cf-mitigated") == "challenge" ||
+                doc.title().contains("Just a moment", ignoreCase = true) ||
+                pageText.contains("Verify you are human", ignoreCase = true) ||
+                pageText.contains("Checking your browser", ignoreCase = true)
+            if (cloudflarePage) {
+                throw java.io.IOException("Cloudflare returned a verification page while loading gallery pages. " + lastPageSummary)
+            }
+
+            // Some gallery layouts expose the multi-page viewer outside #gdt.
+            val mpvHref = doc.selectFirst("a[href*=/mpv/]")?.absUrl("href")
+                ?.takeIf { it.toHttpUrlOrNull()?.host == mirrorHost }
+            if (!mpvHref.isNullOrBlank()) return getMpvPages(mpvHref)
+
+            // Support the classic table and the compact/thumbnail variants.
+            // The final /s/<key>/<gallery>-<page> path check avoids collecting
+            // unrelated links when the mirror changes surrounding markup.
+            val pageLinks = doc.select(
+                "#gdt a[href], .gdtm a[href], .gdtl a[href], .gdtc a[href], a[href*='/s/']",
+            ).mapNotNull { link ->
+                val pageUrl = link.absUrl("href").ifBlank { link.attr("href") }
+                val parsed = pageUrl.toHttpUrlOrNull() ?: return@mapNotNull null
+                val segments = parsed.pathSegments
+                if (segments.size >= 3 && segments[0] == "s" && segments[2].contains('-')) {
+                    parsed.toString()
+                } else {
+                    null
+                }
+            }
+            pageUrls.addAll(pageLinks)
+
+            next = nextPageUrl(doc)
+        }
+
+        if (pageUrls.isEmpty()) {
+            throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
+        }
+
+        return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
+    }"""
+            if (old_page_list in s) {
+                s = s.replace(old_page_list, new_page_list, 1)
+                print("Applied mirror reader page extraction:", path)
+            }
+
+            old_next_page = """    private fun nextPageUrl(element: Element) = element.select("a[onclick=return false]").last()?.let {
+        if (it.text() == ">") it.attr("abs:href") else null
+    }"""
+            new_next_page = """    private fun nextPageUrl(element: Element): String? {
+        val nextLink = element.selectFirst(".ptds + td a[href], .ptds+td>a[href]")
+            ?: element.select("a[onclick=return false]").lastOrNull()
+                ?.takeIf { it.text().trim() == ">" }
+        return nextLink?.absUrl("href")?.takeIf { it.isNotBlank() }
+    }"""
+            if (old_next_page in s) {
+                s = s.replace(old_next_page, new_next_page, 1)
+                print("Applied mirror reader pagination:", path)
+            }
+
             # Keep gallery deep links and image fallback strictly on the mirror host.
             s = s.replace(
                 'if (url.host.removePrefix("www.") !in setOf("ex.fangliding.eu.org")) return null',
@@ -192,7 +286,7 @@ if os.path.isdir(old): shutil.move(old,new)
 gradle=os.path.join(dst,"build.gradle.kts")
 s=open(gradle,encoding="utf-8").read()
 s=s.replace('name = "E-Hentai"','name = "ExNoHentai"')
-s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 2", s, count=1)
+s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 3", s, count=1)
 s=s.replace('baseUrl = "https://e-hentai.org"','baseUrl = "https://ex.fangliding.eu.org"')
 s=s.replace('host("e-hentai.org")','host("ex.fangliding.eu.org")')
 s=s.replace('host("exhentai.org")','host("ex.fangliding.eu.org")')
