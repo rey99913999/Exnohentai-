@@ -76,7 +76,7 @@ for root,dirs,files in os.walk(dst):
             cookies[cookie.name] = cookie.value
         }
 
-        val header = cookies.entries.joinToString("; ") { "\${it.key}=\${it.value}" }
+        val header = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
         return if (header.isEmpty()) {
             chain.proceed(request)
         } else {
