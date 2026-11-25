@@ -217,8 +217,11 @@ for root,dirs,files in os.walk(dst):
         if (pageUrls.isEmpty()) {
             throw java.io.IOException(
                 "ExNoHentai found no reader pages. Chapter=${chapter.url}, " +
-                    "pageCount=0, lastRequest=${baseUrl}${chapter.url}. " +
-                    "The server response did not contain usable links in #gdt."
+                    "pageCount=0, lastRequest=${baseUrl}${chapter.url}, " +
+                    "HTTP=${response.code}, final=${response.request.url}, title='${doc.title()}'. " +
+                    "BodyText=${pageText.take(350)}, gdtCount=${doc.select("#gdt").size}, " +
+                    "imageLinks=${doc.select("#gdt a[href]").size}, mpvLinks=${doc.select("a[href*=/mpv/]").size}, " +
+                    "imageTags=${doc.select("img").size}. Response did not contain usable reader links."
             )
         }
 
