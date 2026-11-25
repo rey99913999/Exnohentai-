@@ -10,6 +10,92 @@ for root,dirs,files in os.walk(dst):
             s=open(path,encoding="utf-8").read()
             s=s.replace("eu.kanade.tachiyomi.extension.all.ehentai","eu.kanade.tachiyomi.extension.all.exnohentai")
             s=s.replace("EHentai","ExNoHentai")
+            # Use the mirror's dedicated Popular page; the old search-parameter
+            # approximation can return an empty or unrelated result set.
+            s=re.sub(
+                r'    override suspend fun getPopularManga\\(page: Int\\): MangasPage = if \\(isLangNatural\\(\\)\\) \\{.*?\\n    \\}\\n\\n    override suspend fun getLatestUpdates',
+                '    override suspend fun getPopularManga(page: Int): MangasPage = if (page == 1) {\\n'
+                '        loadListing("$baseUrl/popular", page)\\n'
+                '    } else {\\n'
+                '        MangasPage(emptyList(), false)\\n'
+                '    }\\n\\n'
+                '    override suspend fun getLatestUpdates',
+                s, count=1, flags=re.S
+            )
+
+            # Support all current E-Hentai listing layouts and distinguish an
+            # actual empty result from a blocked/unrecognized HTML response.
+            new_parser = """    private fun parseMangaPage(response: Response, listingUrl: String, page: Int, requestId: Long): ListingResult {
+        val doc = response.asJsoup()
+        val pageText = doc.body()?.text().orEmpty()
+        val titleElements = doc.select(".itg .glink")
+
+        val looksLikeCloudflare = response.header("cf-mitigated") == "challenge" ||
+            doc.title().contains("Just a moment", ignoreCase = true) ||
+            pageText.contains("Verify you are human", ignoreCase = true) ||
+            pageText.contains("Checking your browser", ignoreCase = true) ||
+            pageText.contains("Enable JavaScript and cookies to continue", ignoreCase = true)
+
+        if (looksLikeCloudflare) {
+            throw java.io.IOException(
+                "Cloudflare verification page was returned. Open the mirror in Mihon's internal browser, complete verification, then retry."
+            )
+        }
+
+        if (titleElements.isEmpty()) {
+            val isRealEmptyResult = pageText.contains("No hits found", ignoreCase = true) ||
+                pageText.contains("No results found", ignoreCase = true)
+            if (isRealEmptyResult) return ListingResult(MangasPage(emptyList(), false), null)
+
+            throw java.io.IOException(
+                "ExNoHentai received an unrecognized listing page (HTTP ${response.code}, title='${doc.title()}'). " +
+                    "Page text: ${pageText.take(160)}"
+            )
+        }
+
+        val mangas = titleElements.mapNotNull { titleElement ->
+            val link = titleElement.closest("a") ?: return@mapNotNull null
+            val gallery = titleElement.closest("tr, .gl1t") ?: return@mapNotNull null
+            val galleryTitle = titleElement.text().trim()
+            val galleryUrl = link.attr("href")
+            if (galleryTitle.isEmpty() || galleryUrl.isBlank()) return@mapNotNull null
+
+            if (isLangNatural() && getEnforceLanguagePref()) {
+                val language = gallery.selectFirst("[title^=language]")?.text()
+                if (language != null && language != ehLang) return@mapNotNull null
+            }
+
+            SManga.create().apply {
+                title = galleryTitle
+                url = ExGalleryMetadata.normalizeUrl(galleryUrl)
+                thumbnail_url = gallery.selectFirst(".glthumb img, .gl1e img, .gl3t img")?.let { img ->
+                    img.absUrl("data-src").ifEmpty { img.absUrl("src") }.ifEmpty { null }
+                }
+            }
+        }
+
+        val lastGalleryHref = titleElements.lastOrNull()?.closest("a")?.attr("href")
+        val nextId = doc.selectFirst("a#unext[href]")?.absUrl("href")?.toHttpUrlOrNull()?.queryParameter("next")
+            ?: lastGalleryHref?.let { ExGalleryMetadata.galleryId(it) }
+
+        nextId?.let { id ->
+            val key = cursorKey(listingUrl, page + 1)
+            synchronized(nextCursors) {
+                val existing = nextCursors[key]
+                if (existing == null || existing.requestId <= requestId) {
+                    nextCursors[key] = Cursor(requestId, id)
+                }
+            }
+        }
+
+        val hasNextPage = doc.selectFirst("a#unext[href]")?.hasText() == true
+        return ListingResult(MangasPage(mangas, hasNextPage), nextId)
+    }"""
+            s=re.sub(
+                r'    private fun parseMangaPage\\(response: Response, listingUrl: String, page: Int, requestId: Long\\): ListingResult \\{.*?\\n    \\}\\n\\n    // A gallery is a single chapter',
+                lambda _: new_parser + "\\n\\n    // A gallery is a single chapter",
+                s, count=1, flags=re.S
+            )
             s=s.replace("e-hentai.org","ex.fangliding.eu.org")
             s=s.replace("exhentai.org","ex.fangliding.eu.org")
             # Normalize the old forum host after the general domain substitutions.
@@ -106,6 +192,7 @@ if os.path.isdir(old): shutil.move(old,new)
 gradle=os.path.join(dst,"build.gradle.kts")
 s=open(gradle,encoding="utf-8").read()
 s=s.replace('name = "E-Hentai"','name = "ExNoHentai"')
+s=re.sub(r"versionCode\\s*=\\s*\\d+", "versionCode = 2", s, count=1)
 s=s.replace('baseUrl = "https://e-hentai.org"','baseUrl = "https://ex.fangliding.eu.org"')
 s=s.replace('host("e-hentai.org")','host("ex.fangliding.eu.org")')
 s=s.replace('host("exhentai.org")','host("ex.fangliding.eu.org")')
