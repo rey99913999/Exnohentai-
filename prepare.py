@@ -232,12 +232,10 @@ for root,dirs,files in os.walk(dst):
 
         if (pageUrls.isEmpty()) {
             throw java.io.IOException(
-                "ExNoHentai found no reader pages. Chapter=${chapter.url}, " +
-                    "pageCount=0, lastRequest=${baseUrl}${chapter.url}, " +
-                    "HTTP=${lastStatus}, final=${lastFinalUrl}, title='${lastTitle}'. " +
-                    "BodyText=${lastBodyText}, gdtCount=${lastGdtCount}, " +
-                    "imageLinks=${lastImageLinks}, mpvLinks=${lastMpvLinks}, " +
-                    "imageTags=${lastImageTags}. Response did not contain usable reader links."
+                "ExNoHentai reader debug: HTTP=${lastStatus}, " +
+                    "title='${lastTitle.take(30)}', gdt=${lastGdtCount}, " +
+                    "links=${lastImageLinks}, mpv=${lastMpvLinks}, img=${lastImageTags}, " +
+                    "url=${lastFinalUrl.takeLast(70)}, text=${lastBodyText.take(60)}"
             )
         }
 
