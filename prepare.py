@@ -190,6 +190,14 @@ for root,dirs,files in os.walk(dst):
         val pageUrls = mutableListOf<String>()
         var next: String? = "$baseUrl${chapter.url}"
         var pageNumber = 0
+        var lastStatus = 0
+        var lastFinalUrl = ""
+        var lastTitle = ""
+        var lastBodyText = ""
+        var lastGdtCount = 0
+        var lastImageLinks = 0
+        var lastMpvLinks = 0
+        var lastImageTags = 0
         while (next != null) {
             pageNumber++
             val response = client.get(next, Fetch.DOCUMENT)
@@ -199,6 +207,14 @@ for root,dirs,files in os.walk(dst):
                 doc.title().contains("Just a moment", ignoreCase = true) ||
                 pageText.contains("Verify you are human", ignoreCase = true) ||
                 pageText.contains("Checking your browser", ignoreCase = true)
+            lastStatus = response.code
+            lastFinalUrl = response.request.url.toString()
+            lastTitle = doc.title()
+            lastBodyText = pageText.take(350)
+            lastGdtCount = doc.select("#gdt").size
+            lastImageLinks = doc.select("#gdt a[href]").size
+            lastMpvLinks = doc.select("a[href*=/mpv/]").size
+            lastImageTags = doc.select("img").size
 
             if (!response.isSuccessful || challenge) {
                 throw java.io.IOException(
@@ -218,10 +234,10 @@ for root,dirs,files in os.walk(dst):
             throw java.io.IOException(
                 "ExNoHentai found no reader pages. Chapter=${chapter.url}, " +
                     "pageCount=0, lastRequest=${baseUrl}${chapter.url}, " +
-                    "HTTP=${response.code}, final=${response.request.url}, title='${doc.title()}'. " +
-                    "BodyText=${pageText.take(350)}, gdtCount=${doc.select("#gdt").size}, " +
-                    "imageLinks=${doc.select("#gdt a[href]").size}, mpvLinks=${doc.select("a[href*=/mpv/]").size}, " +
-                    "imageTags=${doc.select("img").size}. Response did not contain usable reader links."
+                    "HTTP=${lastStatus}, final=${lastFinalUrl}, title='${lastTitle}'. " +
+                    "BodyText=${lastBodyText}, gdtCount=${lastGdtCount}, " +
+                    "imageLinks=${lastImageLinks}, mpvLinks=${lastMpvLinks}, " +
+                    "imageTags=${lastImageTags}. Response did not contain usable reader links."
             )
         }
 
