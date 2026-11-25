@@ -239,8 +239,8 @@ for root,dirs,files in os.walk(dst):
         return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
     }"""
             s, reader_replacements = re.subn(
-                r'    override suspend fun getPageList\\(chapter: SChapter\\): List<Page> \\{.*?\\n    \\}\\n\\n    private suspend fun getMpvPages',
-                lambda _: new_page_list + "\\n\\n    private suspend fun getMpvPages",
+                r'    override suspend fun getPageList\(chapter: SChapter\): List<Page> \{.*?\n    \}\n\n    private suspend fun getMpvPages',
+                lambda _: new_page_list + "\n\n    private suspend fun getMpvPages",
                 s, count=1, flags=re.S
             )
             if reader_replacements != 1:
