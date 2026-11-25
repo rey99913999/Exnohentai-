@@ -188,7 +188,7 @@ for root,dirs,files in os.walk(dst):
     }"""
             new_page_list = """    override suspend fun getPageList(chapter: SChapter): List<Page> {
         val pageUrls = mutableListOf<String>()
-        var next: String? = "$baseUrl\${chapter.url}"
+        var next: String? = "$baseUrl${chapter.url}"
         while (next != null) {
             val doc = client.get(next, Fetch.DOCUMENT).asJsoup()
             val hrefs = doc.select("#gdt a").map { it.attr("abs:href") }
@@ -197,7 +197,7 @@ for root,dirs,files in os.walk(dst):
             next = nextPageUrl(doc)
         }
         return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
-    }
+    }"""
             if "override suspend fun getPageList(chapter: SChapter)" in s:
                 s, reader_replacements = re.subn(
                     r'    override suspend fun getPageList\(chapter: SChapter\): List<Page> \{.*?\n    \}\n\n    private suspend fun getMpvPages',
