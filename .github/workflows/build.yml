@@ -24,6 +24,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Format ExNoHentai Kotlin sources
+        working-directory: upstream
+        run: ./gradlew :src:all:exnohentai:spotlessApply --no-daemon
       - name: Build release APK
         working-directory: upstream
         run: ./gradlew :src:all:exnohentai:assembleRelease --no-daemon
