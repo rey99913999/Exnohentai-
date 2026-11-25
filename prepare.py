@@ -31,7 +31,7 @@ for root,dirs,files in os.walk(dst):
                 '            .flatMap { it.second }\n'
                 '            .joinToString("x")\n'
                 '        listOf("uconfig" to "prn_n-xl_$excludedLanguages", "nw" to "1")\n'
-                '            .joinToString("; ") { "\${it.first}=\${it.second}" }\n'
+                '            .joinToString("; ") { "${it.first}=${it.second}" }\n'
                 '    }\n\n'
                 '    override fun OkHttpClient.Builder.configureClient',
                 s, count=1, flags=re.S
@@ -48,7 +48,6 @@ for root,dirs,files in os.walk(dst):
                 r'    private fun getCookieValue\(.*?\n    private fun getForceEhPref\(\): Boolean = preferences\.getBoolean\(FORCE_EH, FORCE_EH_DEFAULT_VALUE\)\n',
                 '', s, count=1, flags=re.S
             )
-            open(path,"w",encoding="utf-8").write(s)
             open(path,"w",encoding="utf-8").write(s)
 old=os.path.join(dst,"src","eu","kanade","tachiyomi","extension","all","ehentai")
 new=os.path.join(dst,"src","eu","kanade","tachiyomi","extension","all","exnohentai")
