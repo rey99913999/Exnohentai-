@@ -194,6 +194,9 @@ for root,dirs,files in os.walk(dst):
         var lastFinalUrl = ""
         var lastTitle = ""
         var lastBodyText = ""
+        var lastContentType = ""
+        var lastResponseBytes = 0
+        var lastRawPreview = ""
         var lastGdtCount = 0
         var lastImageLinks = 0
         var lastMpvLinks = 0
@@ -201,6 +204,7 @@ for root,dirs,files in os.walk(dst):
         while (next != null) {
             pageNumber++
             val response = client.get(next, Fetch.DOCUMENT)
+            val rawPreview = response.peekBody(512).string()
             val doc = response.asJsoup()
             val pageText = doc.body()?.text().orEmpty()
             val challenge = response.header("cf-mitigated") == "challenge" ||
@@ -210,7 +214,10 @@ for root,dirs,files in os.walk(dst):
             lastStatus = response.code
             lastFinalUrl = response.request.url.toString()
             lastTitle = doc.title()
-            lastBodyText = pageText.take(350)
+            lastBodyText = pageText.take(100)
+            lastContentType = response.header("Content-Type").orEmpty()
+            lastResponseBytes = rawPreview.toByteArray().size
+            lastRawPreview = rawPreview.replace(Regex("\\s+"), " ").take(55)
             lastGdtCount = doc.select("#gdt").size
             lastImageLinks = doc.select("#gdt a[href]").size
             lastMpvLinks = doc.select("a[href*=/mpv/]").size
@@ -232,10 +239,9 @@ for root,dirs,files in os.walk(dst):
 
         if (pageUrls.isEmpty()) {
             throw java.io.IOException(
-                "ExNoHentai reader debug: HTTP=${lastStatus}, " +
-                    "title='${lastTitle.take(30)}', gdt=${lastGdtCount}, " +
-                    "links=${lastImageLinks}, mpv=${lastMpvLinks}, img=${lastImageTags}, " +
-                    "url=${lastFinalUrl.takeLast(70)}, text=${lastBodyText.take(60)}"
+                "EXDBG H=${lastStatus} B=${lastResponseBytes} " +
+                    "CT=${lastContentType.take(18)} RAW='${lastRawPreview}' " +
+                    "TXT='${lastBodyText.take(35)}' G=${lastGdtCount} L=${lastImageLinks}"
             )
         }
 
