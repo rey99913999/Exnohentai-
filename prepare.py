@@ -235,8 +235,29 @@ for root,dirs,files in os.walk(dst):
             next = nextPageUrl(doc)?.takeIf { it.toHttpUrlOrNull()?.host in setOf(mirrorHost, "e-hentai.org", "exhentai.org") }
         }
 
-        if (pageUrls.isEmpty()) throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
-        return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
+        if (pageUrls.isNotEmpty()) {
+            return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
+        }
+
+        // Some mirror responses render the gallery route blank while the MPV
+        // endpoint still exposes the complete image-key list in its scripts.
+        val galleryParts = chapterUrl.toHttpUrl().pathSegments
+        if (galleryParts.size >= 3 && galleryParts[0] == "g") {
+            val mpvUrl = chapterUrl.toHttpUrl().newBuilder()
+                .encodedPath("/mpv/${galleryParts[1]}/${galleryParts[2]}/")
+                .query(null)
+                .fragment(null)
+                .build()
+                .toString()
+            try {
+                val mpvPages = getMpvPages(mpvUrl)
+                if (mpvPages.isNotEmpty()) return mpvPages
+            } catch (e: Exception) {
+                lastPageSummary += "; direct MPV fallback failed: " + (e.message ?: e.javaClass.simpleName)
+            }
+        }
+
+        throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
     }"""
             if "override suspend fun getPageList(chapter: SChapter)" in s:
                 s, reader_replacements = re.subn(
@@ -280,7 +301,7 @@ if os.path.isdir(old): shutil.move(old,new)
 gradle=os.path.join(dst,"build.gradle.kts")
 s=open(gradle,encoding="utf-8").read()
 s=s.replace('name = "E-Hentai"','name = "ExNoHentai"')
-s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 7", s, count=1)
+s=re.sub(r"versionCode\s*=\s*\d+", "versionCode = 8", s, count=1)
 s=s.replace('baseUrl = "https://e-hentai.org"','baseUrl = "https://ex.fangliding.eu.org"')
 s=s.replace('host("e-hentai.org")','host("ex.fangliding.eu.org")')
 s=s.replace('host("exhentai.org")','host("ex.fangliding.eu.org")')
