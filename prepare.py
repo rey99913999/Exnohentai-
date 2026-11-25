@@ -25,3 +25,8 @@ s=s.replace('host("e-hentai.org")','host("ex.fangliding.eu.org")')
 s=s.replace('host("exhentai.org")','host("ex.fangliding.eu.org")')
 open(gradle,"w",encoding="utf-8").write(s)
 print("Module copied and patched")
+
+# Rename the source file to match its transformed class name for ktlint.
+old_file=os.path.join(dst,"src","eu","kanade","tachiyomi","extension","all","exnohentai","EHentai.kt")
+new_file=os.path.join(dst,"src","eu","kanade","tachiyomi","extension","all","exnohentai","ExNoHentai.kt")
+if os.path.isfile(old_file): shutil.move(old_file,new_file)
