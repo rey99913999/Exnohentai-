@@ -248,10 +248,9 @@ for root,dirs,files in os.walk(dst):
 
         return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
     }"""
-            if (old_page_list in s) {
+            if old_page_list in s:
                 s = s.replace(old_page_list, new_page_list, 1)
                 print("Applied mirror reader page extraction:", path)
-            }
 
             old_next_page = """    private fun nextPageUrl(element: Element) = element.select("a[onclick=return false]").last()?.let {
         if (it.text() == ">") it.attr("abs:href") else null
@@ -262,10 +261,9 @@ for root,dirs,files in os.walk(dst):
                 ?.takeIf { it.text().trim() == ">" }
         return nextLink?.absUrl("href")?.takeIf { it.isNotBlank() }
     }"""
-            if (old_next_page in s) {
+            if old_next_page in s:
                 s = s.replace(old_next_page, new_next_page, 1)
                 print("Applied mirror reader pagination:", path)
-            }
 
             # Keep gallery deep links and image fallback strictly on the mirror host.
             s = s.replace(
