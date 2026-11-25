@@ -187,78 +187,17 @@ for root,dirs,files in os.walk(dst):
         return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
     }"""
             new_page_list = """    override suspend fun getPageList(chapter: SChapter): List<Page> {
-        val pageUrls = linkedSetOf<String>()
-        val visitedPages = mutableSetOf<String>()
-        val mirrorHost = baseUrl.toHttpUrl().host
-        val chapterUrl = chapter.url.toHttpUrlOrNull()?.let { url ->
-            if (url.host == mirrorHost) url.toString() else null
-        } ?: baseUrl + chapter.url
-        var next: String? = chapterUrl
-        var lastPageSummary = ""
-
+        val pageUrls = mutableListOf<String>()
+        var next: String? = "$baseUrl\${chapter.url}"
         while (next != null) {
-            val currentUrl = next
-            if (!visitedPages.add(currentUrl)) break
-            if (visitedPages.size > 100) throw java.io.IOException("Reader pagination loop detected")
-
-            val response = client.get(currentUrl, Fetch.DOCUMENT)
-            val doc = response.asJsoup()
-            val pageText = doc.body()?.text().orEmpty()
-            lastPageSummary = "HTTP " + response.code + ", title='" + doc.title() +
-                "', url='" + response.request.url + "', body='" + pageText.take(180) + "'"
-
-            if (response.header("cf-mitigated") == "challenge" ||
-                doc.title().contains("Just a moment", true) ||
-                pageText.contains("Verify you are human", true) ||
-                pageText.contains("Checking your browser", true)) {
-                throw java.io.IOException("Cloudflare verification response: " + lastPageSummary)
-            }
-
-            val mpvHref = doc.select("a[href*=/mpv/]").firstOrNull()?.absUrl("href")
-                ?.takeIf { it.toHttpUrlOrNull()?.host in setOf(mirrorHost, "e-hentai.org", "exhentai.org") }
-            if (!mpvHref.isNullOrBlank()) return getMpvPages(mpvHref)
-
-            // Collect thumbnail/page links using several mirror layouts and validate
-            // the URL path without assuming the gallery-page suffix format.
-            val pageLinks = doc.select("#gdt a[href], .gdtm a[href], .gdtl a[href], .gdtc a[href], a[href*=/s/]")
-                .mapNotNull { link ->
-                    val url = link.absUrl("href").ifBlank { link.attr("href") }
-                    val parsed = url.toHttpUrlOrNull() ?: return@mapNotNull null
-                    if (parsed.host !in setOf(mirrorHost, "e-hentai.org", "exhentai.org")) return@mapNotNull null
-                    val segments = parsed.pathSegments
-                    if (segments.size >= 3 && segments[0] == "s") {
-                        parsed.toString()
-                    } else null
-                }
-            pageUrls.addAll(pageLinks)
-
-            next = nextPageUrl(doc)?.takeIf { it.toHttpUrlOrNull()?.host in setOf(mirrorHost, "e-hentai.org", "exhentai.org") }
+            val doc = client.get(next, Fetch.DOCUMENT).asJsoup()
+            val hrefs = doc.select("#gdt a").map { it.attr("abs:href") }
+            hrefs.firstOrNull { "/mpv/" in it }?.let { return getMpvPages(it) }
+            pageUrls += hrefs
+            next = nextPageUrl(doc)
         }
-
-        if (pageUrls.isNotEmpty()) {
-            return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
-        }
-
-        // Some mirror responses render the gallery route blank while the MPV
-        // endpoint still exposes the complete image-key list in its scripts.
-        val galleryParts = chapterUrl.toHttpUrl().pathSegments
-        if (galleryParts.size >= 3 && galleryParts[0] == "g") {
-            val mpvUrl = chapterUrl.toHttpUrl().newBuilder()
-                .encodedPath("/mpv/${galleryParts[1]}/${galleryParts[2]}/")
-                .query(null)
-                .fragment(null)
-                .build()
-                .toString()
-            try {
-                val mpvPages = getMpvPages(mpvUrl)
-                if (mpvPages.isNotEmpty()) return mpvPages
-            } catch (e: Exception) {
-                lastPageSummary += "; direct MPV fallback failed: " + (e.message ?: e.javaClass.simpleName)
-            }
-        }
-
-        throw java.io.IOException("No reader image-page links were found. " + lastPageSummary)
-    }"""
+        return pageUrls.mapIndexed { index, url -> Page(index, url = url) }
+    }
             if "override suspend fun getPageList(chapter: SChapter)" in s:
                 s, reader_replacements = re.subn(
                     r'    override suspend fun getPageList\(chapter: SChapter\): List<Page> \{.*?\n    \}\n\n    private suspend fun getMpvPages',
